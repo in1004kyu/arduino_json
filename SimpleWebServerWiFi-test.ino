@@ -5,34 +5,37 @@
 char ssid[] = "sevencore2";      //  your network SSID (name)
 char pass[] = "sevencore2010";   // your network password
 int keyIndex = 0;                 // your network key Index number (needed only for WEP)
-const int BUFFER_SIZE = 256;
 
 const int switchPin = 2;
 const int motorPin = 9;
 const int okPin = 5;
+const int ledleft = 3;
+const int ledright = 6;
+
 int switchState = 0;
+
+byte mac[6];
 
 int status = WL_IDLE_STATUS;
 WiFiServer server(81);
 void setup() {
   // put input, output pin for motor and switch
-  pinMode(motorPin, OUTPUT);
-  pinMode(switchPin, INPUT);
-  pinMode(okPin, OUTPUT);
-
+  String fv;
   Serial.begin(9600);      // initialize serial communication
-  //pinMode(9, OUTPUT);      // set the LED pin mode
-
   // check for the presence of the shield:
   if (WiFi.status() == WL_NO_SHIELD) {
     Serial.println("WiFi shield not present");
     while (true);       // don't continue
   }
 
-  String fv = WiFi.firmwareVersion();
-  if ( fv != "1.1.0" )
+  fv = WiFi.firmwareVersion();
+  Serial.println(fv);
+  if ( fv != "1.1.0" ) {
     Serial.println("Please upgrade the firmware");
-
+    Serial.println(fv);
+    return;
+  }
+ 
   // attempt to connect to Wifi network:
   while ( status != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named: ");
@@ -45,8 +48,16 @@ void setup() {
   }
   server.begin();                           // start the web server on port 80
   printWifiStatus();                        // you're connected now, so print out the status
+  set_pin();
+}
 
-  //Connection ok!
+void set_pin() {
+  pinMode(motorPin, OUTPUT);
+  pinMode(switchPin, INPUT);
+  pinMode(okPin, OUTPUT);
+  pinMode(ledleft, OUTPUT);
+  pinMode(ledright, OUTPUT);
+
   digitalWrite(okPin, HIGH);
 }
 
@@ -61,124 +72,62 @@ void run_motor() {
   }
 }
 
-void example() {
-  //char name[HTTP_REQ_PARAM_NAME_LENGTH], value[HTTP_REQ_PARAM_VALUE_LENGTH];
-  WiFiClient client = server.available();   // listen for incoming clients
-
-  if (client) {                             // if you get a client,
-    Serial.println("new client");           // print a message out the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected()) {            // loop while the client's connected
-      if (client.available()) {             // if there's bytes to read from the client,
-
-        char c = client.read();             // read a byte, then
-        Serial.write(c);                    // print it out the serial monitor
-        //httpReq.parseRequest(c);
-        if (c == '\n') {                    // if the byte is a newline character
-
-          Serial.println("New Line!!!!!!!");
-
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
-            Serial.println("length is 0!!!!!!!!!!!!!!!!!!!!");
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println();
-
-            // the content of the HTTP response follows the header:
-            client.print("Click <a href=\"/H\">here</a> turn the LED on pin 9 on<br>");
-            client.print("Click <a href=\"/L\">here</a> turn the LED on pin 9 off<br>");
-
-            // The HTTP response ends with another blank line:
-            client.println();
-            // break out of the while loop:
-            break;
-          }
-          else {      // if you got a newline, then clear currentLine:
-            Serial.println("REset currentLine!!!");
-            currentLine = "";
-          }
-        }
-        else if (c != '\r') {    // if you got anything else but a carriage return character,
-          currentLine += c;      // add it to the end of the currentLine
-        }
-
-        // Check to see if the client request was "GET /H" or "GET /L":
-        if (currentLine.endsWith("GET /H")) {
-          Serial.println("endwWirth!!!!!");
-          digitalWrite(9, HIGH);               // GET /H turns the LED on
-        }
-        if (currentLine.endsWith("GET /L")) {
-          digitalWrite(9, LOW);                // GET /L turns the LED off
-        }
-
-      }
-    }
-    // close the connection:
-    client.stop();
-    Serial.println("client disonnected");
-  }
-}
+char *data_buffer;
 
 bool readRequest(WiFiClient& client) {
-  bool currentLineIsBlank = true;
-  Serial.println("new client");           // print a message out the serial port
-  while (client.connected()) {            // loop while the client's connected
-    if (client.available()) {             // if there's bytes to read from the client,
-      char c = client.read();             // read a byte, then
-      Serial.write(c);                    // print it out the serial monitor
-
-      if (c == '\n' && !currentLineIsBlank) {
-        return true;
-      } else if (c == '\n') {
-        currentLineIsBlank = true;
-      } else if (c != '\r') {
-        currentLineIsBlank = false;
-      }
-
-    }
-  }
-  return false;
-}
-
-char json_buffer[BUFFER_SIZE];
-//String jsonData = "";
-//char *jsonData = "";
-
-bool readRequest2(WiFiClient& client) {
   bool startJson = false;
   int cntOfBracket = 0;
   int cnt = 0;
+  String currentLine = "";
+  int content_len = 0;
+  String slen = "";
+  bool iscontentlength = false;
   Serial.println("new client");           // print a message out the serial port
   while (client.connected()) {            // loop while the client's connected
     if (client.available()) {             // if there's bytes to read from the client,
       char c = client.read();             // read a byte, then
       Serial.write(c);                    // print it out the serial monitor
-      
-      if(c == '{') {
+
+      if (c == '\n') {
+        currentLine = "";
+        if (iscontentlength) {
+          slen += '\n';
+          iscontentlength = false;
+          content_len = slen.toInt();
+          //Serial.println(content_len);
+          data_buffer = (char*) malloc(sizeof(char) * content_len);
+        }
+      } else if (c != '\r') {
+        currentLine += c;
+      }
+
+      if (currentLine.startsWith("Content-Length: ", 0)) {
+        slen += c;
+        iscontentlength = true;
+      }
+
+
+      if (c == '{') {
         startJson = true;
         cntOfBracket++;
       }
-      else if(c == '}')
+      else if (c == '}')
         cntOfBracket--;
-        
-      if(startJson) {
-        if(cntOfBracket == 0) {
+
+      if (startJson) {
+        if (cntOfBracket == 0) {
           //jsonData += c;
-          json_buffer[cnt] = c;
+          data_buffer[cnt] = c;
           cnt++;
           //Serial.println(jsonData);
-          Serial.println(json_buffer);
-          return true; 
+          //Serial.println(data_buffer);
+          return true;
         }
         //jsonData += c;
-        json_buffer[cnt] = c;
+        data_buffer[cnt] = c;
         cnt++;
       }
-      
+
     }
   }
   return false;
@@ -199,46 +148,81 @@ void writeResponse(WiFiClient& client, JsonObject& json) {
   json.prettyPrintTo(client);
 }
 
+void operation(const char* op) {
+
+  //Serial.println(op);
+  //Serial.println("All off");
+   digitalWrite(motorPin, LOW);
+   digitalWrite(ledleft, LOW);
+   digitalWrite(ledright, LOW);
+   
+  if (strcmp(op, "forward") == 0) {
+     digitalWrite(motorPin, HIGH);
+    //Serial.println("forward!");
+  } else if (strcmp(op, "stop") == 0) {
+    //Serial.println("stop!");
+    digitalWrite(motorPin, LOW);
+  } else if (strcmp(op, "ledon1") == 0) {
+    //Serial.println("ledon1!");
+    digitalWrite(ledleft, HIGH);
+  } else if (strcmp(op, "ledon2") == 0) {
+    //Serial.println("ledon2!");
+    digitalWrite(ledright, HIGH);
+  } else if (strcmp(op, "ledoff1") == 0) {
+    //Serial.println("ledoff1!");
+    digitalWrite(ledleft, LOW);
+  } else if (strcmp(op, "ledoff2") == 0) {
+    //Serial.println("ledoff2!");
+     digitalWrite(ledright, LOW);
+  }
+  //Serial.println("delay!!!");
+  delay(1000);
+
+}
+
 void jsonmain() {
   WiFiClient client = server.available();
   int i, j, h;
-
+  const char* op;
   if (client) {
-    bool success = readRequest2(client);
+    bool success = readRequest(client);
     if (success) {
-      StaticJsonBuffer<BUFFER_SIZE> jsonBuffer; 
+      DynamicJsonBuffer jsonBuffer;
+      //StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
+      JsonObject& root = jsonBuffer.parseObject(data_buffer);
 
-       // char json2[] = "{\"sensor\":\"gps\",\"time\":1351824120,\"data\":[48.756080,2.302038]}";
-      //json2 = jsonData;
-      JsonObject& root = jsonBuffer.parseObject(json_buffer);
-      //JsonArray& array = jsonBuffer.parseArray(jsonData);
       
-      if(!root.success()) {
+      if (!root.success()) {
         Serial.println("parseObject() failed");
       } else {
-        Serial.println("Success parse???");
-        root.printTo(Serial);
-        /*
-        for(i = 0; i < root["cnt"]; i++) {
-          for(j = 0; j < root["data"][i]["loop"]; i++) {
-            for(h = 0; h < root["data"][i]["cnt"]; h++) {
-              //  Serial.println( root["data"][i]["card"][h] );
+        Serial.println("Success parse");
+        //root.printTo(Serial);
+
+        for (i = 0; i < root["cnt"]; i++) {
+          for (j = 0; j < root["data"][i]["loop"]; j++) {
+            for (h = 0; h < root["data"][i]["cnt"]; h++) {
+              op = root["data"][i]["card"][h].asString();
+              operation(op);
             }
           }
-                    
-        
-            for(j = 0; j < root[i].loop; j++) {
-              for(h = 0; h < root[i].card.length; h++) {
-                  Serial.println(root[i].card[h]);
-              }
-            }
-       
         }
-        */
       }
 
+      
+      
+      //StaticJsonBuffer<100> okbuffer;
       JsonObject& json = prepareResponse(jsonBuffer);
       writeResponse(client, json);
+
+      //End of response. Free all of allocation memory
+      for(i = 0; i < 3; i++) {
+        digitalWrite(okPin, LOW);
+        delay(500);
+        digitalWrite(okPin, HIGH);
+        delay(500);
+      }
+      
+      free(data_buffer);
     }
     delay(1);
     client.stop();
@@ -246,13 +230,27 @@ void jsonmain() {
   }
 }
 
-
 void loop() {
   jsonmain();
   run_motor();
 }
 
 void printWifiStatus() {
+
+  WiFi.macAddress(mac);
+  Serial.print("MAC: ");
+  Serial.print(mac[5],HEX);
+  Serial.print(":");
+  Serial.print(mac[4],HEX);
+  Serial.print(":");
+  Serial.print(mac[3],HEX);
+  Serial.print(":");
+  Serial.print(mac[2],HEX);
+  Serial.print(":");
+  Serial.print(mac[1],HEX);
+  Serial.print(":");
+  Serial.println(mac[0],HEX);
+  
   // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
@@ -271,108 +269,3 @@ void printWifiStatus() {
   Serial.print("To see this page in action, open a browser to http://");
   Serial.println(ip);
 }
-
-
-void jsontest() {
-  // listen for incoming clients
-  WiFiClient client = server.available();
-  if (client) {
-    //Serial.println("new client");
-    // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        Serial.write(c);
-     
-        // if you've gotten to the end of the line (received a newline
-        // character) and the line is blank, the http request has ended,
-        // so you can send a reply
-        if (c == '\n' && currentLineIsBlank) {
-          // send a standard http response header
-          Serial.println("Clear!!!");
-          StaticJsonBuffer<500> jsonBuffer;
-          JsonObject& json = prepareResponse(jsonBuffer);
-           writeResponse(client, json);
-          break;
-        }
-        if (c == '\n') {
-          // you're starting a new line
-          currentLineIsBlank = true;
-        }
-        else if (c != '\r') {
-          // you've gotten a character on the current line
-          currentLineIsBlank = false;
-        }
-      }
-    }
-    // give the web browser time to receive the data
-    delay(1);
-    // close the connection:
-    client.stop();
-    Serial.println("client disonnected");
-  }
-}
-
-
-/*
-      //IF request has ended -> handle response
-      if (httpReq.endOfRequest()) {
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: text/html");
-        client.println("Connnection: close");
-        client.println();
-        client.println("<!DOCTYPE HTML>");
-        client.println("<html>");
-        client.println("<body>");
-        //handle response to requesting client and access arguments
-        //access object properties
-        client.print("Method: ");
-        client.print(httpReq.method);
-        client.println("<br>");
-        client.print("Uri: ");
-        client.print(httpReq.uri);
-        client.println("<br>");
-        client.print("Version: ");
-        client.print(httpReq.version);
-        client.println("<br>");
-        client.print("paramCount: ");
-        client.print(httpReq.paramCount);
-        client.println("<br>");
-        //list received parameters GET and POST
-        client.println("Parameters:<br>");
-        for (int i = 1; i <= httpReq.paramCount; i++) {
-          httpReq.getParam(i, name, value);
-          client.print(name);
-          client.print("-");
-          client.print(value);
-          client.println("<br>");
-
-          Serial.print(name);
-          Serial.print("-");
-          Serial.println(value);
-
-        }
-        //list received cookies
-        client.println("Cookies:<br>");
-        for (int i = 1; i <= httpReq.cookieCount; i++) {
-          httpReq.getCookie(i, name, value);
-          client.print(name);
-          client.print(" - ");
-          client.print(value);
-          client.println("<br>");
-        }
-        //Reset object and free dynamic allocated memory
-        httpReq.resetRequest();
-        break;
-      }
-    }
-  }
-
-
-  delay(1);
-  client.stop();
-  Serial.print("client disconneted");
-
-}
-*/
