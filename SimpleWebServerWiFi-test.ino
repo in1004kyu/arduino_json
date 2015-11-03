@@ -35,7 +35,7 @@ void setup() {
     Serial.println(fv);
     return;
   }
- 
+
   // attempt to connect to Wifi network:
   while ( status != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named: ");
@@ -152,12 +152,12 @@ void operation(const char* op) {
 
   //Serial.println(op);
   //Serial.println("All off");
-   digitalWrite(motorPin, LOW);
-   digitalWrite(ledleft, LOW);
-   digitalWrite(ledright, LOW);
-   
+  digitalWrite(motorPin, LOW);
+  digitalWrite(ledleft, LOW);
+  digitalWrite(ledright, LOW);
+
   if (strcmp(op, "forward") == 0) {
-     digitalWrite(motorPin, HIGH);
+    digitalWrite(motorPin, HIGH);
     //Serial.println("forward!");
   } else if (strcmp(op, "stop") == 0) {
     //Serial.println("stop!");
@@ -173,7 +173,7 @@ void operation(const char* op) {
     digitalWrite(ledleft, LOW);
   } else if (strcmp(op, "ledoff2") == 0) {
     //Serial.println("ledoff2!");
-     digitalWrite(ledright, LOW);
+    digitalWrite(ledright, LOW);
   }
   //Serial.println("delay!!!");
   delay(1000);
@@ -191,7 +191,7 @@ void jsonmain() {
       //StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
       JsonObject& root = jsonBuffer.parseObject(data_buffer);
 
-      
+
       if (!root.success()) {
         Serial.println("parseObject() failed");
       } else {
@@ -208,20 +208,18 @@ void jsonmain() {
         }
       }
 
-      
-      
       //StaticJsonBuffer<100> okbuffer;
       JsonObject& json = prepareResponse(jsonBuffer);
       writeResponse(client, json);
 
       //End of response. Free all of allocation memory
-      for(i = 0; i < 3; i++) {
+      for (i = 0; i < 3; i++) {
         digitalWrite(okPin, LOW);
         delay(500);
         digitalWrite(okPin, HIGH);
         delay(500);
       }
-      
+
       free(data_buffer);
     }
     delay(1);
@@ -239,18 +237,18 @@ void printWifiStatus() {
 
   WiFi.macAddress(mac);
   Serial.print("MAC: ");
-  Serial.print(mac[5],HEX);
+  Serial.print(mac[5], HEX);
   Serial.print(":");
-  Serial.print(mac[4],HEX);
+  Serial.print(mac[4], HEX);
   Serial.print(":");
-  Serial.print(mac[3],HEX);
+  Serial.print(mac[3], HEX);
   Serial.print(":");
-  Serial.print(mac[2],HEX);
+  Serial.print(mac[2], HEX);
   Serial.print(":");
-  Serial.print(mac[1],HEX);
+  Serial.print(mac[1], HEX);
   Serial.print(":");
-  Serial.println(mac[0],HEX);
-  
+  Serial.println(mac[0], HEX);
+
   // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
